@@ -1,0 +1,10 @@
+{
+  "name": "효성인 3종 경기",
+  "description": "모션 인식과 3D 그래픽을 활용하여 즐기는 효성인 3종 경기 게임",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

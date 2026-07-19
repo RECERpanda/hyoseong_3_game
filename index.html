@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>효성인 3종 경기</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: black;
+            color: white;
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+        }
+
+        /* 🌟 이미지 부르르 떨림 애니메이션 */
+        @keyframes imgShake {
+            0% { transform: translate(-3px, -3px); }
+            25% { transform: translate(3px, 3px); }
+            50% { transform: translate(-3px, 3px); }
+            75% { transform: translate(3px, -3px); }
+            100% { transform: translate(0, 0); }
+        }
+        .shake-image {
+            animation: imgShake 0.08s infinite;
+        }
+
+        /* =========================================
+CANVAS
+========================================= */
+
+        #bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+        }
+
+        /* =========================================
+UI
+========================================= */
+
+        #ui {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+        }
+
+        .screen {
+            position: absolute;
+            inset: 0;
+        }
+
+        /* =========================================
+MENU
+========================================= */
+
+        #menu {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            /* 버튼이 늘어나서 간격을 살짝 줄임 */
+
+            background-image: url('메뉴화면배경.png');
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+        }
+
+        .title {
+            font-size: 74px;
+            font-weight: 900;
+            letter-spacing: 10px;
+
+            margin-bottom: 20px;
+
+            text-shadow:
+                0 0 10px white,
+                0 0 40px #888,
+                0 0 80px #555;
+        }
+
+        .btn {
+            width: 320px;
+            padding: 16px;
+            /* 모바일/배치 최적화를 위해 패딩 살짝 조절 */
+
+            border: none;
+            border-radius: 18px;
+
+            font-size: 22px;
+            font-weight: 800;
+
+            cursor: pointer;
+
+            color: white;
+
+            background: rgba(255, 255, 255, .08);
+
+            border: 1px solid rgba(255, 255, 255, .2);
+
+            backdrop-filter: blur(10px);
+
+            transition: .25s;
+
+            box-shadow:
+                0 0 20px rgba(255, 255, 255, .15);
+        }
+
+        .btn:hover {
+            transform: translateY(-5px) scale(1.03);
+
+            border-color: #66ddff;
+
+            box-shadow:
+                0 0 20px rgba(255, 255, 255, .3),
+                0 0 60px rgba(0, 200, 255, .4);
+        }
+
+        /* =========================================
+GAME UI
+========================================= */
+
+        #counter {
+            display: none;
+            position: absolute;
+
+            top: 55px;
+            left: 50%;
+
+            transform: translateX(-50%);
+
+            font-size: 90px;
+            font-weight: 900;
+
+            text-shadow:
+                0 0 20px white,
+                0 0 40px cyan,
+                0 0 80px cyan;
+            z-index: 50;
+        }
+
+        #timer {
+            display: none;
+            position: absolute;
+
+            top: 20px;
+            right: 30px;
+
+            font-size: 34px;
+            font-weight: 700;
+
+            text-shadow: 0 0 12px white;
+            z-index: 50;
+        }
+
+        #status {
+            position: absolute;
+
+            top: 20px;
+            left: 20px;
+
+            font-size: 18px;
+
+            opacity: .7;
+            z-index: 50;
+        }
+
+        #webcam {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            width: 260px;
+            border-radius: 18px;
+            border: 2px solid rgba(255, 255, 255, .8);
+            opacity: 1;
+            transform: scaleX(-1);
+            transition: width 1s ease-in-out;
+            filter: none !important;
+            z-index: 9999 !important;
+        }
+
+        #webcam.playing {
+            width: 520px;
+        }
+
+        #rankingList {
+            max-height: 350px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        #rankingList::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #rankingList::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+
+        /* =========================================
+OVERLAY
+========================================= */
+
+        #overlay {
+            position: absolute;
+            inset: 0;
+
+            display: none;
+
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+
+            background: rgba(0, 0, 0, .72);
+
+            backdrop-filter: blur(8px);
+
+            z-index: 100;
+        }
+
+        #overlayText {
+            font-size: 42px;
+            font-weight: 800;
+
+            opacity: 0;
+
+            transition: 1s;
+
+            text-shadow:
+                0 0 20px white,
+                0 0 40px white;
+
+            white-space: pre-line;
+        }
+
+        #countdown {
+            margin-top: 35px;
+
+            font-size: 120px;
+            font-weight: 900;
+
+            opacity: 0;
+
+            text-shadow:
+                0 0 20px white,
+                0 0 60px cyan;
+        }
+
+        #guide {
+            margin-top: 25px;
+
+            font-size: 28px;
+
+            opacity: 0;
+
+            transition: 1s;
+        }
+
+        /* =========================================
+RANKING & SETTINGS
+========================================= */
+
+        #rankingScreen,
+        #settingsModal,
+        #endScreen,
+        #guideModal {
+            /* 🌟 게임방법 모달 추가 */
+            display: none;
+
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+
+            background: rgba(0, 0, 0, .93);
+
+            backdrop-filter: blur(8px);
+
+            z-index: 80;
+        }
+
+        #rankingScreen {
+            z-index: 90;
+        }
+
+        /* top3Screen(85)보다 위에 표시 */
+        #settingsModal {
+            z-index: 100;
+        }
+
+        #rankingScreen {
+            z-index: 90;
+        }
+
+        /* top3Screen(85)보다 위에 표시 */
+        #guideModal {
+            z-index: 110;
+        }
+
+        /* 🌟 게임 방법이 가장 위에 뜨도록 */
+
+        .panelTitle {
+            font-size: 58px;
+            font-weight: 900;
+
+            margin-bottom: 24px;
+
+            text-shadow: 0 0 20px white;
+        }
+
+        .rankItem {
+            width: 540px;
+            padding: 16px 22px;
+            border-radius: 18px;
+            margin: 8px;
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid rgba(255, 255, 255, .12);
+            font-size: 24px;
+        }
+
+        .gold {
+            border: 2px solid gold;
+            color: gold;
+            box-shadow: 0 0 30px gold;
+        }
+
+        .silver {
+            border: 2px solid silver;
+            box-shadow: 0 0 30px silver;
+        }
+
+        .bronze {
+            border: 2px solid #d99050;
+            color: #ffbf80;
+            box-shadow: 0 0 30px #d99050;
+        }
+
+        input {
+            width: 320px;
+            padding: 16px;
+            border: none;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, .12);
+            color: white;
+            font-size: 22px;
+            margin-top: 20px;
+        }
+
+        #saveMessage {
+            margin-top: 14px;
+            color: #7dff9d;
+            opacity: 0;
+            transition: .3s;
+        }
+
+        .shake {
+            animation: shake .16s;
+        }
+
+        @keyframes shake {
+            0% {
+                transform: translate(0);
+            }
+
+            25% {
+                transform: translate(-6px, 2px);
+            }
+
+            50% {
+                transform: translate(6px, -2px);
+            }
+
+            75% {
+                transform: translate(-4px, 3px);
+            }
+
+            100% {
+                transform: translate(0);
+            }
+        }
+
+        #timer {
+            right: 85px !important;
+        }
+
+        #settingsBtn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 45px;
+            height: 45px;
+            font-size: 24px;
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 12px;
+            color: white;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: .2s;
+            z-index: 50;
+        }
+
+        #settingsBtn:hover {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, .2);
+            box-shadow: 0 0 15px rgba(255, 255, 255, .3);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 320px;
+            height: 8px;
+            padding: 0;
+            background: rgba(255, 255, 255, .2);
+            border-radius: 4px;
+            outline: none;
+            margin-top: 0;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #66ddff;
+            cursor: pointer;
+            box-shadow: 0 0 15px #66ddff;
+            transition: .2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* =========================================
+TOGGLE SWITCH
+========================================= */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.2);
+            transition: 0.4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        input:checked+.slider {
+            background-color: #66ddff;
+            box-shadow: 0 0 10px rgba(102, 221, 255, 0.5);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(26px);
+        }
+
+        /* =========================================
+🌟 팝업형 게임 방법 (GUIDE MODAL) STYLE
+========================================= */
+        .guideContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 1040px;
+            height: 740px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+
+        #guideImg {
+            max-width: 100%;
+            max-height: 540px;
+            object-fit: contain;
+            margin-bottom: 20px;
+            border-radius: 12px;
+        }
+
+        #guideVideo, #guideIframe {
+            width: 960px;
+            height: 540px;
+            object-fit: contain;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            outline: none;
+        }
+
+        #guideIframe {
+            border: none;
+        }
+
+        #guideText {
+            font-size: 20px;
+            font-weight: 600;
+            line-height: 1.6;
+            text-align: center;
+            color: #e0e0e0;
+            white-space: pre-line;
+            word-break: keep-all;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .guideNav {
+            display: flex;
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .guideNavBtn {
+            width: 120px;
+            padding: 12px;
+            font-size: 18px;
+            font-weight: 700;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: 0.2s;
+        }
+
+        .guideNavBtn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #66ddff;
+            box-shadow: 0 0 15px rgba(102, 221, 255, 0.4);
+        }
+
+        #guidePageNum {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #66ddff;
+        }
+
+        /* =========================================
+🌟 TOP 3 PODIUM STYLE
+========================================= */
+        #top3Screen {
+            background: url('랭킹배경.png') no-repeat center center;
+            background-size: cover;
+            flex-direction: column;
+        }
+
+        .podium-container {
+            display: flex;
+            align-items: flex-end;
+            /* 바닥을 기준으로 정렬 */
+            justify-content: center;
+            gap: 30px;
+            height: 60%;
+            margin-top: 140px;
+        }
+
+        .podium-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 900x1200 비율을 유지하면서 적당한 크기로 조정 */
+        .podium-avatar {
+            width: 180px;
+            height: 240px;
+            object-fit: contain;
+            margin-bottom: -20px;
+            /* 캐릭터가 단상에 살짝 걸터앉은 느낌을 줌 */
+            z-index: 2;
+        }
+
+        /* 단상 디자인 */
+        .podium {
+            width: 220px;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.15), rgba(0, 0, 0, 0.8));
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-bottom: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .rank-1 {
+            height: 320px;
+        }
+
+        .rank-2 {
+            height: 240px;
+        }
+
+        .rank-3 {
+            height: 180px;
+        }
+
+        /* 완만한 모서리의 정보 박스 */
+        .info-box {
+            background: rgba(0, 0, 0, 0.75);
+            border-radius: 18px;
+            /* 완만한 모서리 */
+            padding: 15px 10px;
+            text-align: center;
+            width: 160px;
+            backdrop-filter: blur(5px);
+        }
+
+        .gold-box {
+            border: 3px solid gold;
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
+        }
+
+        .silver-box {
+            border: 3px solid silver;
+            box-shadow: 0 0 20px rgba(192, 192, 192, 0.4);
+        }
+
+        .bronze-box {
+            border: 3px solid #d99050;
+            box-shadow: 0 0 20px rgba(217, 144, 80, 0.4);
+        }
+
+        .info-rank {
+            font-size: 24px;
+            font-weight: 900;
+            margin-bottom: 8px;
+            color: inherit;
+        }
+
+        .gold-box .info-rank {
+            color: gold;
+        }
+
+        .silver-box .info-rank {
+            color: silver;
+        }
+
+        .bronze-box .info-rank {
+            color: #ffbf80;
+        }
+
+        .info-name {
+            font-size: 20px;
+            color: white;
+            font-weight: bold;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .info-time {
+            font-size: 18px;
+            color: #ccc;
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="bg"></canvas>
+
+    <div id="ui">
+        <!-- 1단계: 청기백기 UI -->
+        <div id="stage1UI" style="display:none; position:absolute; inset:0; overflow:hidden;">
+            <div id="stage1Images" style="position:absolute; inset:0; z-index:40; background:transparent; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                <img id="stage1Img" src="내림.png" style="width:100vw; height:100vh; object-fit:cover; border:none; border-radius:0; box-shadow:none; position:absolute; inset:0; z-index:-1;">
+                <div id="stage1SeqText" style="position:relative; z-index:45; font-size:12vw; font-weight:900; color:red; text-shadow: -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, 0 0 30px rgba(255,0,0,0.8); pointer-events:none; display:none;"></div>
+            </div>
+            <!-- 좌우 파란 불 표시부 (손 뻗었을 때 파란 빛) -->
+            <div id="blueLightLeft" style="position:absolute; left:0; top:0; width:50%; height:100%; background:linear-gradient(to right, rgba(0, 149, 255, 0.6), rgba(0, 0, 0, 0)); opacity:0; transition:opacity 0.1s; pointer-events:none; z-index:46;"></div>
+            <div id="blueLightRight" style="position:absolute; right:0; top:0; width:50%; height:100%; background:linear-gradient(to left, rgba(0, 149, 255, 0.6), rgba(0, 0, 0, 0)); opacity:0; transition:opacity 0.1s; pointer-events:none; z-index:46;"></div>
+        </div>
+
+        <!-- 2단계: 총 쏘기 UI -->
+        <div id="stage2UI" style="display:none; position:absolute; inset:0; background:transparent; z-index: 50;">
+            <div id="targetCircle"
+                style="position:absolute; width:90px; height:90px; background:red; border-radius:50%; display:none; transform:translate(-50%, -50%); box-shadow: 0 0 30px red;">
+            </div>
+        </div>
+
+        <!-- 공용 조준점 (항상 맨 위) -->
+        <div id="crosshair"
+            style="position:absolute; width:40px; height:40px; border:3px solid cyan; border-radius:50%; transform:translate(-50%, -50%); pointer-events:none; display:none; box-shadow: 0 0 10px cyan; z-index: 999999;">
+            <div
+                style="position:absolute; top:50%; left:50%; width:6px; height:6px; background:cyan; transform:translate(-50%, -50%);">
+            </div>
+        </div>
+
+        <!-- 페이즈 전환 메시지 -->
+        <div id="phaseMessage"
+            style="display:none; position:absolute; inset:0; z-index:90; align-items:center; justify-content:center; flex-direction:column; background:rgba(0,0,0,0.85); font-size:50px; font-weight:bold; text-shadow:0 0 20px cyan; text-align:center;">
+            <div id="phaseText"></div>
+            <div id="phaseCountdown" style="font-size:120px; margin-top:30px; color: yellow;">3</div>
+        </div>
+
+        <!-- 인트로 화면 -->
+        <div id="introScreen" style="position: absolute; inset: 0; background: black; z-index: 100000; display: flex; justify-content: center; align-items: center; opacity: 1; transition: opacity 1.2s ease-in-out; pointer-events: none;">
+            <img src="인트로.png" id="introImg" style="max-width: 40%; max-height: 40%; opacity: 0; transition: opacity 1.5s ease-in-out; object-fit: contain;">
+        </div>
+
+        <div id="menu" class="screen">
+            <img src="효성고 로고.png" id="schoolLogo" style="width: 280px; max-height: 180px; margin-top: -30px; margin-bottom: 15px; object-fit: contain; z-index: 15;">
+
+            <div class="title">
+                효성인 3종 경기
+            </div>
+
+            <button class="btn" id="startBtn">
+                게임 시작
+            </button>
+
+            <button class="btn" id="rankingBtn">
+                랭킹
+            </button>
+
+            <button class="btn" id="guideBtn">
+                게임 방법
+            </button>
+
+            <div id="userInfo"
+                style="font-size:20px; color:#66ddff; margin-top:10px; margin-bottom:5px; font-weight:700;">로그인 상태 확인
+                중...</div>
+            <button class="btn" id="loginBtn"
+                style="display:none; background:rgba(66,133,244,.2); border-color:#4285f4; font-size:20px; padding:12px;">구글
+                로그인</button>
+            <button class="btn" id="logoutBtn"
+                style="display:none; background:rgba(255,50,50,.2); border-color:rgba(255,50,50,.5); font-size:20px; padding:12px;">로그아웃</button>
+            <button class="btn" id="changeNameBtn"
+                style="display:none; margin-bottom:10px; font-size:20px; padding:12px;">닉네임 변경</button>
+        </div>
+
+        <div id="counter">0</div>
+
+        <div id="timer">0.00s</div>
+
+        <button id="settingsBtn">⚙️</button>
+
+        <div id="settingsModal" class="screen">
+            <div class="panelTitle" style="font-size:45px; margin-bottom:40px;">설정</div>
+
+            <div style="font-size:24px; font-weight:bold; margin-bottom:10px;">배경음악 (BGM)</div>
+            <input type="range" id="bgmSlider" min="0" max="1" step="0.05" value="0.45">
+
+            <div style="font-size:24px; font-weight:bold; margin-bottom:10px; margin-top:30px;">효과음 (SFX)</div>
+            <input type="range" id="sfxSlider" min="0" max="1" step="0.05" value="1.0">
+
+            <button class="btn" id="closeSettingsBtn" style="margin-top:50px;">닫기</button>
+        </div>
+
+        <div id="guideModal" class="screen">
+            <div class="panelTitle" style="font-size:45px; margin-bottom:20px;">게임 방법</div>
+            <div class="guideContainer">
+                <div id="guidePageNum">1 / 4</div>
+                <img id="guideImg" src="1p.png" alt="Guide">
+                <video id="guideVideo" autoplay loop muted playsinline style="display:none;"></video>
+                <iframe id="guideIframe" style="display:none;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
+                <div id="guideText" style="display:none;"></div>
+            </div>
+            <div class="guideNav">
+                <button class="guideNavBtn" id="guidePrevBtn">이전</button>
+                <button class="guideNavBtn" id="guideNextBtn">다음</button>
+                <button class="guideNavBtn" id="guideCloseBtn"
+                    style="background:rgba(255,50,50,.1); border-color:rgba(255,50,50,.3);">닫기</button>
+            </div>
+        </div>
+
+        <div id="status">대기 중</div>
+
+        <video id="webcam" autoplay muted playsinline></video>
+
+        <div id="overlay">
+            <div id="overlayText"></div>
+            <div id="countdown"></div>
+            <div id="guide">
+                두 손을 깍지 낀 채 머리 위로 올린 후 강하게 내려치세요!
+            </div>
+        </div>
+
+        <!-- 🌟 새롭게 추가된 명예의 전당 (Top 3) 화면 -->
+        <div id="top3Screen" class="screen" style="display:none; z-index: 85;">
+            <button id="top3BackBtn" class="btn"
+                style="position:absolute; top:20px; left:20px; width:auto; padding:12px 24px;">&lt; 뒤로 가기</button>
+            <button id="showFullRankingBtn" class="btn"
+                style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); width:auto; padding:15px 40px; font-size:24px;">전체
+                랭킹</button>
+
+            <div class="podium-container">
+                <!-- 2등 단상 (왼쪽) -->
+                <div class="podium-wrapper">
+                    <img src="2위.png" class="podium-avatar" style="width: 216px; height: 288px;">
+                    <div class="podium rank-2">
+                        <div class="info-box silver-box">
+                            <div class="info-rank">2위</div>
+                            <div class="info-name" id="top2Name">-</div>
+                            <div class="info-time" id="top2Time">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1등 단상 (중앙) -->
+                <div class="podium-wrapper">
+                    <img src="1위.png" class="podium-avatar" style="width: 270px; height: 360px;">
+                    <div class="podium rank-1">
+                        <div class="info-box gold-box">
+                            <div class="info-rank" style="font-size:28px;">1위</div>
+                            <div class="info-name" id="top1Name">-</div>
+                            <div class="info-time" id="top1Time">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3등 단상 (오른쪽) -->
+                <div class="podium-wrapper">
+                    <img src="3위.png" class="podium-avatar">
+                    <div class="podium rank-3">
+                        <div class="info-box bronze-box">
+                            <div class="info-rank">3위</div>
+                            <div class="info-name" id="top3Name">-</div>
+                            <div class="info-time" id="top3Time">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="rankingScreen" class="screen">
+            <div class="panelTitle">RANKING</div>
+            <div id="rankingList"></div>
+            <button class="btn" id="rankingCloseBtn">닫기</button>
+        </div>
+
+        <div id="endScreen" class="screen">
+            <div class="panelTitle">게임 클리어!</div>
+            <div id="finalTime" style="font-size:40px;"></div>
+
+            <div id="saveMessage">기록이 저장되었습니다!</div>
+            <button class="btn" id="backBtn">메인 메뉴</button>
+        </div>
+
+    </div>
+
+    <audio id="hitSound" src="hit.mp3"></audio>
+    <audio id="bombSound" src="bomb.mp3"></audio>
+
+    <script>
+
+        /* =========================================
+        THREE
+        ========================================= */
+
+        const canvas = document.getElementById("bg");
+        const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+        renderer.setClearColor(0x000000, 0);
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x000000, 10, 60);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 12;
+
+        /* =========================================
+        LIGHT
+        ========================================= */
+
+        const ambient = new THREE.AmbientLight(0xffffff, 1.2);
+        scene.add(ambient);
+
+        /* =========================================
+        DUST
+        ========================================= */
+
+        const dustGeo = new THREE.BufferGeometry();
+        const dustPos = [];
+
+        for (let i = 0; i < 1500; i++) {
+            dustPos.push((Math.random() - .5) * 80, (Math.random() - .5) * 40, (Math.random() - .5) * 80);
+        }
+
+        dustGeo.setAttribute("position", new THREE.Float32BufferAttribute(dustPos, 3));
+        const dustMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.06, transparent: true, opacity: .35});
+        const dust = new THREE.Points(dustGeo, dustMat);
+        scene.add(dust);
+
+        /* =========================================
+        ELLIPSE SHADOW (바위 입체감 타원 그림자)
+        ========================================= */
+
+        const shadowCanvas = document.createElement('canvas');
+        shadowCanvas.width = 256;
+        shadowCanvas.height = 128;
+        const shadowCtx = shadowCanvas.getContext('2d');
+        const shadowGrad = shadowCtx.createRadialGradient(128, 64, 0, 128, 64, 128);
+        shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+        shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        shadowCtx.fillStyle = shadowGrad;
+        shadowCtx.fillRect(0, 0, 256, 128);
+
+        const shadowTex = new THREE.CanvasTexture(shadowCanvas);
+        const shadowGeo = new THREE.PlaneGeometry(8, 4);
+        const shadowMat = new THREE.MeshBasicMaterial({
+            map: shadowTex,
+            transparent: true,
+            depthWrite: false
+        });
+        const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+        shadowMesh.rotation.x = -Math.PI / 2;
+        shadowMesh.position.set(0, -4.6, 0); // 바위 이미지 하단에 맞춘 y 좌표
+        scene.add(shadowMesh);
+
+        /* =========================================
+        ROCK
+        ========================================= */
+
+        const loader = new THREE.TextureLoader();
+        const rockTextures = {
+            0: loader.load("Rock0.png"),
+            10: loader.load("Rock10.png"),
+            20: loader.load("Rock20.png"),
+            30: loader.load("Rock30.png"),
+            40: loader.load("Rock40.png")
+        };
+
+        const rockMaterial = new THREE.SpriteMaterial({map: rockTextures[0], transparent: true});
+        const rock = new THREE.Sprite(rockMaterial);
+        rock.scale.set(10, 10, 1);
+        scene.add(rock);
+
+        /* =========================================
+        PARTICLES
+        ========================================= */
+
+        const particles = [];
+
+        function createParticles(amount, power) {
+            for (let i = 0; i < amount; i++) {
+                const geo = new THREE.SphereGeometry(0.03 + Math.random() * 0.08);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: [0xffffff, 0x999999, 0xffcc88][Math.floor(Math.random() * 3)]
+                });
+
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set((Math.random() - .5) * 2, (Math.random() - .5) * 2, (Math.random() - .5) * 2);
+                mesh.velocity = new THREE.Vector3((Math.random() - .5) * power, Math.random() * power, (Math.random() - .5) * power);
+                mesh.life = 80;
+
+                scene.add(mesh);
+                particles.push(mesh);
+            }
+        }
+
+        /* =========================================
+        ANIMATION
+        ========================================= */
+
+        function animate() {
+            requestAnimationFrame(animate);
+            dust.rotation.y += 0.0004;
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.add(p.velocity);
+                p.velocity.y -= 0.01;
+                p.life--;
+
+                if (p.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                    continue;
+                }
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        /* =========================================
+        AUDIO SYSTEM
+        ========================================= */
+
+        const hitSound = document.getElementById("hitSound");
+        const bombSound = document.getElementById("bombSound");
+
+        let masterBgmVolume = 0.45;
+        let masterSfxVolume = 1.0;
+
+        let gameStarted = false;
+        let gameEnded = false;
+
+        // Menu BGM Rotation System
+        const menuBgmSequence = [1, 2, 3, 1, 2, 3, 4];
+        let menuBgmIndex = 0;
+        let menuBgmAudio = null;
+
+        function playMenuBgm() {
+            if (gameStarted && !gameEnded) return; // Do not play menu BGM during gameplay
+            if (menuBgmAudio) {
+                try { menuBgmAudio.pause(); } catch(e){}
+                menuBgmAudio = null;
+            }
+
+            const trackNum = menuBgmSequence[menuBgmIndex];
+            menuBgmAudio = new Audio(`메뉴화면bgm${trackNum}.mp3`);
+            menuBgmAudio.volume = masterBgmVolume;
+            menuBgmAudio.onended = () => {
+                menuBgmIndex = (menuBgmIndex + 1) % menuBgmSequence.length;
+                playMenuBgm();
+            };
+            menuBgmAudio.play().catch(err => {
+                console.log("Menu BGM playback blocked or failed:", err);
+            });
+        }
+
+        function startMenuBgm() {
+            if (gameStarted && !gameEnded) return;
+            if (menuBgmAudio && !menuBgmAudio.paused) return;
+            playMenuBgm();
+        }
+
+        function stopMenuBgm() {
+            if (menuBgmAudio) {
+                try {
+                    menuBgmAudio.pause();
+                    menuBgmAudio.onended = null;
+                } catch(e){}
+                menuBgmAudio = null;
+            }
+        }
+
+        // In-game BGM System
+        let inGameBgmAudio = null;
+
+        function startInGameBgm() {
+            if (inGameBgmAudio) return;
+            inGameBgmAudio = new Audio("인게임bgm.mp3");
+            inGameBgmAudio.volume = masterBgmVolume;
+            inGameBgmAudio.loop = true;
+            inGameBgmAudio.play().catch(err => {
+                console.log("In-game BGM playback failed:", err);
+            });
+        }
+
+        function stopInGameBgm() {
+            if (inGameBgmAudio) {
+                try { inGameBgmAudio.pause(); } catch(e){}
+                inGameBgmAudio = null;
+            }
+        }
+
+        function fadeVolume(audio, target, speed) {
+            if (!audio) return;
+            const interval = setInterval(() => {
+                if (!audio) {
+                    clearInterval(interval);
+                    return;
+                }
+                if (audio.volume < target) {
+                    audio.volume = Math.min(target, audio.volume + speed);
+                } else {
+                    audio.volume = Math.max(target, audio.volume - speed);
+                }
+                if (Math.abs(audio.volume - target) < .02) {
+                    audio.volume = target;
+                    clearInterval(interval);
+                }
+            }, 40);
+        }
+
+        /* =========================================
+        UI DEFINITIONS
+        ========================================= */
+
+        const menu = document.getElementById("menu");
+        const startBtn = document.getElementById("startBtn");
+        const rankingBtn = document.getElementById("rankingBtn");
+        const overlay = document.getElementById("overlay");
+        const overlayText = document.getElementById("overlayText");
+        const countdown = document.getElementById("countdown");
+        const guide = document.getElementById("guide");
+        const counter = document.getElementById("counter");
+        const timer = document.getElementById("timer");
+        const statusText = document.getElementById("status");
+        const rankingScreen = document.getElementById("rankingScreen");
+        const rankingList = document.getElementById("rankingList");
+        const endScreen = document.getElementById("endScreen");
+
+        /* =========================================
+        STATE & FIREBASE
+        ========================================= */
+        const firebaseConfig = {
+            apiKey: "AIzaSyD6wyfeVCHbhVDYGg2zy3ougmRr9qJfrAQ",
+            authDomain: "rock-breaker.firebaseapp.com",
+            projectId: "rock-breaker",
+            storageBucket: "rock-breaker.firebasestorage.app",
+            messagingSenderId: "560423325233",
+            appId: "1:560423325233:web:f951b447582af457408f10"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentUser = null;
+        let currentUserNickname = "게스트";
+
+        const userInfo = document.getElementById("userInfo");
+        const loginBtn = document.getElementById("loginBtn");
+        const logoutBtn = document.getElementById("logoutBtn");
+        const changeNameBtn = document.getElementById("changeNameBtn");
+
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                const userDoc = await db.collection("users").doc(user.uid).get();
+                if (userDoc.exists) {
+                    currentUserNickname = userDoc.data().nickname;
+                } else {
+                    currentUserNickname = user.displayName || "PLAYER";
+                    await db.collection("users").doc(user.uid).set({nickname: currentUserNickname});
+                }
+                userInfo.innerText = `현재 닉네임: ${currentUserNickname}`;
+                loginBtn.style.display = "none";
+                logoutBtn.style.display = "block";
+                changeNameBtn.style.display = "block";
+                statusText.innerText = `[${currentUserNickname}] 접속 중`;
+            } else {
+                currentUser = null;
+                currentUserNickname = "게스트";
+                userInfo.innerText = "게스트 모드 (랭킹 등록 불가)";
+                loginBtn.style.display = "block";
+                logoutBtn.style.display = "none";
+                changeNameBtn.style.display = "none";
+                statusText.innerText = "대기 중 (게스트)";
+            }
+        });
+
+        loginBtn.addEventListener("click", () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(err => alert("로그인 실패: " + err.message));
+        });
+
+        logoutBtn.addEventListener("click", () => {
+            auth.signOut();
+            alert("로그아웃 되었습니다.");
+        });
+
+        changeNameBtn.addEventListener("click", async () => {
+            const newName = prompt("새로운 닉네임을 입력하세요 (최대 12자):", currentUserNickname);
+            if (!newName || newName.trim() === "" || newName === currentUserNickname) return;
+            const trimmedName = newName.trim().substring(0, 12);
+
+            try {
+                await db.collection("users").doc(currentUser.uid).update({nickname: trimmedName});
+                currentUserNickname = trimmedName;
+                userInfo.innerText = `현재 닉네임: ${currentUserNickname}`;
+
+                const snapshot = await db.collection("rankings").where("uid", "==", currentUser.uid).get();
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => {batch.update(doc.ref, {name: trimmedName});});
+                await batch.commit();
+                alert("닉네임이 성공적으로 변경되었습니다!");
+            } catch (error) {
+                alert("닉네임 변경 중 오류가 발생했습니다.");
+            }
+        });
+
+        let webcamReady = false;
+        let count = 0;
+
+        // 3종 경기용 상태 변수들
+        let currentStage = 0;
+        let isTimerPaused = false;
+        let stageScore = 0;
+        let totalElapsed = 0;
+        let lastTime = 0;
+        let recordedFinalTime = 0;
+
+        // 1단계 변수 (청기백기 손동작 기억 게임)
+        let stageSequence = [];
+        let userSequenceIndex = 0;
+        let isMatchingPhase = false;
+        let maxGestureInCurrentStretch = 'none';
+        let isFirstMemoryRound = true;
+        let memorySpeedFactor = 1.0;
+        let memorySequenceLength = 8;
+
+        // 2단계 변수
+        let targetX = 0.5;
+        let targetY = 0.5;
+        let lastFingerY = 0;
+
+        /* =========================================
+        WEBCAM & POSE (MEDIAPIPE)
+        ========================================= */
+
+        const video = document.getElementById("webcam");
+        let mpCamera = null;
+
+        const pose = new Pose({
+            locateFile: (file) => {return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`;}
+        });
+
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: .5,
+            minTrackingConfidence: .5
+        });
+        pose.onResults(onPoseResults);
+
+        let ready = false;
+        let cooldown = false;
+        let lastHandY = 0;
+
+        async function initWebcam() {
+            if (webcamReady) return true;
+            overlay.style.display = "flex";
+            overlayText.innerText = "웹캠 연결을 요청 중입니다...";
+            overlayText.style.opacity = 1;
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                overlayText.innerText = "보안 문제로 웹캠을 켤 수 없습니다.\n(반드시 로컬 웹 서버로 실행해야 합니다)";
+                await sleep(3000);
+                overlay.style.display = "none";
+                overlayText.style.opacity = 0;
+                return false;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
+                video.srcObject = stream;
+                await new Promise(resolve => {video.onloadedmetadata = () => {resolve();};});
+                overlayText.innerText = "웹캠이 연결되었습니다!";
+                webcamReady = true;
+                await sleep(1500);
+                overlayText.style.opacity = 0;
+                await sleep(1000); //이거임
+            } catch (err) {
+                overlayText.innerText = "웹캠 권한이 필요합니다.";
+                await sleep(2000);
+                overlay.style.display = "none";
+                overlayText.style.opacity = 0;
+                return false;
+            }
+            return true;
+        }
+
+        async function startTracking() {
+            if (mpCamera) return;
+            mpCamera = new Camera(video, {
+                onFrame: async () => {await pose.send({image: video});},
+                width: 1280, height: 720
+            });
+            mpCamera.start();
+        }
+
+        /* =========================================
+        START GAME
+        ========================================= */
+        startBtn.addEventListener("click", async () => {
+            startBtn.disabled = true;
+            stopMenuBgm();
+
+            // 인게임 배경화면 설정
+            document.body.style.backgroundImage = "url('인게임배경화면.png')";
+            document.body.style.backgroundSize = "cover";
+            document.body.style.backgroundPosition = "center center";
+            document.body.style.backgroundRepeat = "no-repeat";
+
+            menu.style.display = "none";
+            counter.style.display = "block";
+            timer.style.display = "block";
+            document.getElementById("bg").style.display = "none"; // 1,2단계 중에는 3D 배경 가리기
+
+            gameStarted = true;
+
+            totalElapsed = 0;
+            lastTime = performance.now();
+
+            // 3종 경기 1단계 시작 호출!
+            document.getElementById("stage1UI").style.display = "block";
+            startNextPhase(1, "1단계: 청기백기", "화면의 지시대로 왼손, 오른손, 양손을 뻗으세요!");
+
+            updateTimer();
+        });
+
+        /* =========================================
+        TIMER & POSE MATH
+        ========================================= */
+
+        function updateTimer() {
+            if (gameEnded) return;
+            let now = performance.now();
+            let delta = now - lastTime;
+            lastTime = now;
+
+            if (!isTimerPaused && gameStarted) {
+                totalElapsed += delta;
+                timer.innerText = `${(totalElapsed / 1000).toFixed(2)}s`;
+            }
+            requestAnimationFrame(updateTimer);
+        }
+        /* =========================================
+        NEW TRIATHLON LOGIC
+        ========================================= */
+        async function startNextPhase(stageNum, title, desc) {
+            isTimerPaused = true; // 타이머 일시정지
+            const pm = document.getElementById("phaseMessage");
+            const pt = document.getElementById("phaseText");
+            const pc = document.getElementById("phaseCountdown");
+
+            pm.style.display = "flex";
+            pt.innerText = title + "\n\n" + desc;
+
+            for (let i = 3; i > 0; i--) {
+                pc.innerText = i;
+                await sleep(1000);
+            }
+            pm.style.display = "none";
+
+            currentStage = stageNum;
+            stageScore = 0;
+            count = 0;
+            
+            if (stageNum === 1) {
+                counter.innerText = "0 / 1";
+                memorySpeedFactor = 1.0;
+                memorySequenceLength = 8;
+                isFirstMemoryRound = true;
+            } else if (stageNum === 2) {
+                counter.innerText = "0 / 20";
+            } else if (stageNum === 3) {
+                counter.innerText = "0 / 50";
+            }
+            
+            isTimerPaused = false;
+            lastTime = performance.now(); // 타이머 재가동 기준점 업데이트
+
+            if (stageNum === 1) startMemoryGameLoop();
+            if (stageNum === 2) {
+                startInGameBgm();
+                spawnTarget();
+            }
+            if (stageNum === 3) {
+                video.classList.add("playing");
+                document.getElementById("bg").style.display = "block"; // 바위 게임 배경 복구
+            }
+        }
+
+        async function startMemoryGameLoop() {
+            if (currentStage !== 1) return;
+
+            // Ensure image element exists and is set to 내림.png
+            const imgEl = document.getElementById("stage1Img");
+            imgEl.src = "내림.png";
+
+            if (isFirstMemoryRound) {
+                isFirstMemoryRound = false;
+                // Play 시작.mp3
+                const startSound = new Audio("시작.mp3");
+                startSound.volume = masterSfxVolume;
+                await new Promise(resolve => {
+                    startSound.onended = resolve;
+                    startSound.play().catch(resolve);
+                });
+                // Wait for 시작.mp3 to finish
+            }
+
+            // Now start memory round
+            await runMemoryRound();
+        }
+
+        async function runMemoryRound() {
+            if (currentStage !== 1) return;
+
+            // Generate random sequence of memorySequenceLength moves: 'L' (왼쪽), 'R' (오른쪽), 'B' (양쪽)
+            // ensuring no two consecutive moves are identical.
+            const moves = ['L', 'R', 'B'];
+            stageSequence = [];
+            let lastMove = '';
+            for (let i = 0; i < memorySequenceLength; i++) {
+                let currentMove;
+                do {
+                    currentMove = moves[Math.floor(Math.random() * moves.length)];
+                } while (currentMove === lastMove);
+                stageSequence.push(currentMove);
+                lastMove = currentMove;
+            }
+
+            // Play 준비.mp3 at dynamic speed
+            const prepSound = new Audio("준비.mp3");
+            prepSound.volume = masterSfxVolume;
+            prepSound.playbackRate = memorySpeedFactor;
+            prepSound.play().catch(() => {});
+
+            const imgEl = document.getElementById("stage1Img");
+            const seqTextEl = document.getElementById("stage1SeqText");
+            seqTextEl.style.display = "block";
+
+            // Show sequence (dynamic speed based on memorySpeedFactor)
+            const sleepDuration = Math.round(350 / memorySpeedFactor);
+            for (let i = 0; i < memorySequenceLength; i++) {
+                if (currentStage !== 1) {
+                    prepSound.pause();
+                    seqTextEl.style.display = "none";
+                    return;
+                }
+                const move = stageSequence[i];
+                if (move === 'L') {
+                    imgEl.src = "왼쪽.png";
+                    seqTextEl.innerText = "왼쪽";
+                } else if (move === 'R') {
+                    imgEl.src = "오른쪽.png";
+                    seqTextEl.innerText = "오른쪽";
+                } else if (move === 'B') {
+                    imgEl.src = "양쪽.png";
+                    seqTextEl.innerText = "양쪽";
+                }
+
+                await sleep(sleepDuration);
+            }
+
+            // Stop the audio if the sequence finishes
+            prepSound.pause();
+            prepSound.currentTime = 0;
+
+            // After showing all moves, return to 내림.png for matching phase
+            imgEl.src = "내림.png";
+            seqTextEl.style.display = "none";
+
+            // Sequence display finished, now match phase
+            userSequenceIndex = 0;
+            isMatchingPhase = true;
+            maxGestureInCurrentStretch = 'none';
+
+            // Update status or counter for user
+            statusText.innerText = "기억한 순서대로 손을 뻗으세요!";
+        }
+
+        let lastBorder = 'none';
+
+        function spawnTarget() {
+            const stage2UI = document.getElementById("stage2UI");
+            stage2UI.style.display = "block";
+
+            // Clean up any remaining target elements if this is the start of the stage (stageScore === 0)
+            if (stageScore === 0) {
+                const oldTargets = stage2UI.querySelectorAll(".game2-target");
+                oldTargets.forEach(t => t.remove());
+                lastBorder = 'none';
+            }
+
+            // Decide border
+            const borders = ['top', 'bottom', 'left', 'right'];
+            const availableBorders = borders.filter(b => b !== lastBorder);
+            const border = availableBorders[Math.floor(Math.random() * availableBorders.length)];
+            lastBorder = border;
+
+            const id = Date.now() + "_" + Math.floor(Math.random() * 1000);
+            const container = document.createElement("div");
+            container.id = "target_" + id;
+            container.className = "game2-target";
+            container.style.position = "absolute";
+            container.style.overflow = "visible";
+            container.style.transition = "all 0.5s cubic-bezier(0.25, 1, 0.5, 1)";
+            container.style.pointerEvents = "none";
+            container.style.zIndex = "41";
+
+            let rotation = 0;
+            let width = 300;
+            let height = 450;
+            
+            // Initial position styling based on border
+            if (border === 'bottom') {
+                rotation = 0;
+                width = 300;
+                height = 450;
+                const randomX = Math.floor(Math.random() * (window.innerWidth - width - 20)) + 10;
+                container.style.width = width + "px";
+                container.style.height = height + "px";
+                container.style.left = randomX + "px";
+                container.style.bottom = `-${height}px`;
+            } else if (border === 'top') {
+                rotation = 180;
+                width = 300;
+                height = 450;
+                const randomX = Math.floor(Math.random() * (window.innerWidth - width - 20)) + 10;
+                container.style.width = width + "px";
+                container.style.height = height + "px";
+                container.style.left = randomX + "px";
+                container.style.top = `-${height}px`;
+            } else if (border === 'left') {
+                rotation = 90;
+                width = 450;
+                height = 300;
+                const randomY = Math.floor(Math.random() * (window.innerHeight - height - 20)) + 10;
+                container.style.width = width + "px";
+                container.style.height = height + "px";
+                container.style.top = randomY + "px";
+                container.style.left = `-${width}px`;
+            } else if (border === 'right') {
+                rotation = 270;
+                width = 450;
+                height = 300;
+                const randomY = Math.floor(Math.random() * (window.innerHeight - height - 20)) + 10;
+                container.style.width = width + "px";
+                container.style.height = height + "px";
+                container.style.top = randomY + "px";
+                container.style.right = `-${width}px`;
+            }
+
+            container.innerHTML = `
+                <div style="position: absolute; width: 300px; height: 450px; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(${rotation}deg); transform-origin: center center;">
+                    <img class="boy-img" src="게임2등장.png" style="width: 100%; height: 100%; object-fit: contain;">
+                    <div class="active-target-circle" style="position: absolute; width: 34px; height: 34px; background: red; border-radius: 50%; box-shadow: 0 0 15px red; left: 50.8%; top: 24.5%; transform: translate(-50%, -50%); z-index: 45;"></div>
+                </div>
+            `;
+
+            stage2UI.appendChild(container);
+
+            // Trigger slide in on the next frame
+            requestAnimationFrame(() => {
+                if (border === 'bottom') {
+                    container.style.bottom = "0px";
+                } else if (border === 'top') {
+                    container.style.top = "0px";
+                } else if (border === 'left') {
+                    container.style.left = "0px";
+                } else if (border === 'right') {
+                    container.style.right = "0px";
+                }
+            });
+        }
+
+        function onPoseResults(results) {
+            if (!gameStarted || gameEnded || !results.poseLandmarks || isTimerPaused) return;
+            const lm = results.poseLandmarks;
+
+            if (currentStage === 1) {
+                if (!isMatchingPhase) return;
+
+                const leftWrist = lm[15];
+                const rightWrist = lm[16];
+                const leftShoulder = lm[11];
+                const rightShoulder = lm[12];
+                const leftHip = lm[23];
+                const rightHip = lm[24];
+
+                if (leftWrist && rightWrist && leftShoulder && rightShoulder && leftHip && rightHip) {
+                    const shoulderWidth = Math.max(0.03, Math.abs(leftShoulder.x - rightShoulder.x));
+
+                    // Left hand is stretched to user's left (larger x)
+                    const leftStretched = (leftWrist.x > leftShoulder.x + shoulderWidth * 0.6) && (leftWrist.y < leftHip.y);
+                    // Right hand is stretched to user's right (smaller x)
+                    const rightStretched = (rightWrist.x < rightShoulder.x - shoulderWidth * 0.6) && (rightWrist.y < rightHip.y);
+
+                    let frameGesture = 'none';
+                    if (leftStretched && rightStretched) {
+                        frameGesture = 'B';
+                    } else if (leftStretched) {
+                        frameGesture = 'L';
+                    } else if (rightStretched) {
+                        frameGesture = 'R';
+                    }
+
+                    // Update UI (파란 불 들어오기)
+                    document.getElementById("blueLightLeft").style.opacity = (frameGesture === 'L' || frameGesture === 'B') ? "1" : "0";
+                    document.getElementById("blueLightRight").style.opacity = (frameGesture === 'R' || frameGesture === 'B') ? "1" : "0";
+
+                    if (frameGesture !== 'none') {
+                        if (maxGestureInCurrentStretch === 'none') {
+                            maxGestureInCurrentStretch = frameGesture;
+                        } else if (frameGesture === 'B') {
+                            maxGestureInCurrentStretch = 'B';
+                        }
+                    } else {
+                        // Returned to none! Trigger action on release.
+                        if (maxGestureInCurrentStretch !== 'none') {
+                            const expected = stageSequence[userSequenceIndex];
+                            const actual = maxGestureInCurrentStretch;
+                            maxGestureInCurrentStretch = 'none'; // Reset
+
+                            if (actual === expected) {
+                                if (userSequenceIndex === memorySequenceLength - 1) {
+                                    // Sequence matched successfully!
+                                    isMatchingPhase = false;
+
+                                    // Play 삐이익.mp3
+                                    const bbiikSound = new Audio("삐이익.mp3");
+                                    bbiikSound.volume = masterSfxVolume;
+                                    bbiikSound.play().catch(() => {});
+
+                                    stageScore++;
+                                    counter.innerText = `${stageScore} / 1`;
+
+                                    if (stageScore >= 1) {
+                                        // End Stage 1 and transition to Stage 2!
+                                        document.getElementById("stage1UI").style.display = "none";
+                                        startNextPhase(2, "2단계: 총 쏘기", "검지 손가락으로 원을 정확히 조준하세요!");
+                                    } else {
+                                        statusText.innerText = "라운드 성공!";
+                                        setTimeout(() => {
+                                            runMemoryRound();
+                                        }, 1000);
+                                    }
+                                } else {
+                                    // 1st to N-1 step matched successfully!
+                                    // Play 삑.mp3
+                                    const bbiSound = new Audio("삑.mp3");
+                                    bbiSound.volume = masterSfxVolume;
+                                    bbiSound.play().catch(() => {});
+
+                                    userSequenceIndex++;
+                                    statusText.innerText = `성공! (${userSequenceIndex}/${memorySequenceLength})`;
+                                }
+                            } else {
+                                // Mismatch / Failure!
+                                isMatchingPhase = false;
+                                statusText.innerText = "실패! 다시 기억하세요.";
+
+                                // Decrease sequence count by 2, clamped to min 2
+                                memorySequenceLength = Math.max(2, memorySequenceLength - 2);
+
+                                // Flash red background as visual feedback of failure
+                                const imgDiv = document.getElementById("stage1Images");
+                                const originalBg = imgDiv.style.background;
+                                imgDiv.style.background = "rgba(255, 0, 0, 0.6)";
+                                setTimeout(() => {
+                                    imgDiv.style.background = originalBg;
+                                }, 500);
+
+                                setTimeout(() => {
+                                    runMemoryRound();
+                                }, 1200);
+                            }
+                        }
+                    }
+                }
+            }
+            else if (currentStage === 2) {
+                const index = lm[20] || lm[19]; // 오른손 또는 왼손 검지 끝
+                if (!index) return;
+
+                const ch = document.getElementById("crosshair");
+                ch.style.display = "block";
+                ch.style.left = ((1 - index.x) * 100) + "%";
+                ch.style.top = (index.y * 100) + "%";
+
+                // Get all active target circles on screen
+                const activeCircles = document.querySelectorAll(".active-target-circle");
+                let isAimingAny = false;
+
+                activeCircles.forEach(circle => {
+                    const rect = circle.getBoundingClientRect();
+                    const cx = rect.left + rect.width / 2;
+                    const cy = rect.top + rect.height / 2;
+
+                    const chRect = ch.getBoundingClientRect();
+                    const chx = chRect.left + chRect.width / 2;
+                    const chy = chRect.top + chRect.height / 2;
+
+                    const dist = Math.hypot(chx - cx, chy - cy);
+                    
+                    // Since red circle diameter is 34px (radius 17px), 
+                    // contact occurs if distance is <= 25px (allowing a tiny margin for better gameplay)
+                    if (dist <= 25) {
+                        isAimingAny = true;
+                        
+                        // Hit target! Mark as hit immediately so it cannot be hit twice
+                        circle.classList.remove("active-target-circle");
+                        circle.style.display = "none";
+
+                        // Play sound
+                        const shootSound = new Audio("총소리.mp3");
+                        shootSound.volume = masterSfxVolume;
+                        shootSound.play().catch(() => {});
+
+                        stageScore++;
+                        counter.innerText = `${stageScore} / 20`;
+
+                        // Get parent container of this target to perform exit animation
+                        const container = circle.closest(".game2-target");
+                        if (container) {
+                            const img = container.querySelector(".boy-img");
+                            if (img) {
+                                img.src = "게임2퇴장.png";
+                                img.classList.add("shake-image");
+                            }
+
+                            // 0.5초 흔들리고
+                            setTimeout(() => {
+                                if (img) {
+                                    img.classList.remove("shake-image");
+                                }
+                                // 1.0초 정지한 뒤 (총 1.5초 후) 나왔던 자리로 다시 들어감
+                                setTimeout(() => {
+                                    if (container.style.bottom === "0px") {
+                                        container.style.bottom = `-${container.offsetHeight}px`;
+                                    } else if (container.style.top === "0px") {
+                                        container.style.top = `-${container.offsetHeight}px`;
+                                    } else if (container.style.left === "0px") {
+                                        container.style.left = `-${container.offsetWidth}px`;
+                                    } else if (container.style.right === "0px") {
+                                        container.style.right = `-${container.offsetWidth}px`;
+                                    }
+
+                                    // 0.5초 뒤 제거 (총 2.0초 후)
+                                    setTimeout(() => {
+                                        container.remove();
+                                    }, 500);
+                                }, 1000);
+                            }, 500);
+                        }
+
+                        // Check if goal reached
+                        if (stageScore >= 20) {
+                            // Clear all active targets
+                            const targets = document.querySelectorAll(".game2-target");
+                            targets.forEach(t => t.remove());
+
+                            document.getElementById("stage2UI").style.display = "none";
+                            ch.style.display = "none";
+                            startNextPhase(3, "최종 3단계: 바위 부수기", "양손을 깍지 낀 채 높이 들고 내리치세요!");
+                        } else {
+                            // Spawn next target immediately
+                            spawnTarget();
+                        }
+                    }
+                });
+
+                if (isAimingAny) {
+                    ch.style.borderColor = "red";
+                    ch.style.boxShadow = "0 0 10px red";
+                } else {
+                    ch.style.borderColor = "cyan";
+                    ch.style.boxShadow = "0 0 10px cyan";
+                }
+            }
+            else if (currentStage === 3) {
+                // 기존 바위 부수기 로직
+                const leftWrist = lm[15];
+                const rightWrist = lm[16];
+                const nose = lm[0];
+
+                const handY = (leftWrist.y + rightWrist.y) / 2;
+                const velocity = handY - lastHandY;
+                lastHandY = handY;
+
+                if (handY < nose.y) {
+                    ready = true;
+                    statusText.innerText = "READY";
+                }
+
+                if (ready && !cooldown && velocity > 0.015) {
+                    ready = false;
+                    cooldown = true;
+                    hitRock(Math.min(velocity * 60, 3));
+                    setTimeout(() => {cooldown = false;}, 120);
+                }
+            }
+        }
+
+        /* =========================================
+        HIT ROCK & END GAME
+        ========================================= */
+        function hitRock(power) {
+            count++;
+            counter.innerText = `${count} / 50`;
+
+            counter.style.transform = "translateX(-50%) scale(1.2)";
+            setTimeout(() => {counter.style.transform = "translateX(-50%) scale(1)";}, 70);
+
+            const sound = hitSound.cloneNode();
+            sound.volume = Math.min(0.5 + power * 0.1, 1) * masterSfxVolume;
+            sound.play().catch(() => { });
+
+            document.body.classList.add("shake");
+            if (this.shakeTimer) clearTimeout(this.shakeTimer);
+            this.shakeTimer = setTimeout(() => {document.body.classList.remove("shake");}, 80);
+
+            let shakeCount = 0;
+            const level = Math.floor(count / 10);
+            const intensity = 0.06 + level * 0.02;
+
+            const interval = setInterval(() => {
+                rock.position.x = (Math.random() - .5) * intensity;
+                rock.position.y = (Math.random() - .5) * intensity;
+                shakeCount++;
+                if (shakeCount > 5) {rock.position.set(0, 0, 0); clearInterval(interval);}
+            }, 16);
+
+            createParticles(15 + level * 5, 0.1 + level * 0.05 + power * 0.05);
+
+            if (count >= 40) rock.material.map = rockTextures[40];
+            else if (count >= 30) rock.material.map = rockTextures[30];
+            else if (count >= 20) rock.material.map = rockTextures[20];
+            else if (count >= 10) rock.material.map = rockTextures[10];
+            rock.material.needsUpdate = true;
+
+            // 🌟 기획에 맞춘 최종 목표 타격 횟수: 50번
+            if (count >= 50) {
+                endGame();
+            }
+        }
+
+        async function endGame() {
+            gameEnded = true;
+            bombSound.volume = 1 * masterSfxVolume;
+            bombSound.play().catch(() => { });
+            createParticles(500, 1.2);
+            rock.visible = false;
+            document.body.classList.add("shake");
+            fadeVolume(inGameBgmAudio, 0, .02);
+            setTimeout(() => { stopInGameBgm(); }, 1000);
+            video.classList.remove("playing");
+
+            recordedFinalTime = parseFloat((totalElapsed / 1000).toFixed(2));
+            document.getElementById("finalTime").innerText = `기록 : ${recordedFinalTime}초`;
+
+            await sleep(1800);
+            endScreen.style.display = "flex";
+            autoSaveScore();
+        }
+
+        async function autoSaveScore() {
+            const saveMsg = document.getElementById("saveMessage");
+            saveMsg.style.opacity = 1;
+
+            if (!currentUser) {
+                saveMsg.innerText = "게스트 모드: 랭킹에 기록되지 않습니다.";
+                saveMsg.style.color = "#ffaaaa";
+                return;
+            }
+
+            saveMsg.innerText = "서버에 기록을 자동 확인 중입니다...";
+            saveMsg.style.color = "#7dff9d";
+
+            try {
+                // 🌟 현재 로그인한 유저의 모든 기록을 가져옴 (예전 버전의 쓰레기 데이터 포함)
+                const snapshot = await db.collection("rankings").where("uid", "==", currentUser.uid).get();
+
+                if (!snapshot.empty) {
+                    // 여러 기록 중 '가장 짧은 시간(최고 기록)'을 탐색
+                    let bestDoc = snapshot.docs[0];
+                    let bestTime = bestDoc.data().time;
+
+                    snapshot.docs.forEach(doc => {
+                        if (doc.data().time < bestTime) {
+                            bestTime = doc.data().time;
+                            bestDoc = doc;
+                        }
+                    });
+
+                    // 현재 방금 세운 기록이 기존 최고 기록보다 더 빠르면 업데이트
+                    if (recordedFinalTime < bestTime) {
+                        await bestDoc.ref.update({
+                            time: recordedFinalTime,
+                            name: currentUserNickname,
+                            date: new Date().toLocaleDateString(),
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        saveMsg.innerText = "🎉 최고 기록 경신! 랭킹이 업데이트되었습니다!";
+                    } else {
+                        saveMsg.innerText = `아쉽게도 최고 기록(${bestTime.toFixed(2)}초)을 넘지 못했습니다.`;
+                        saveMsg.style.color = "#cccccc";
+                    }
+
+                    // 🌟 (핵심) 최고 기록 1개를 제외한 나머지 과거의 중복 기록들은 DB에서 깔끔하게 삭제
+                    snapshot.docs.forEach(doc => {
+                        if (doc.id !== bestDoc.id) {
+                            doc.ref.delete();
+                        }
+                    });
+
+                } else {
+                    // 아예 기록이 없는 첫 플레이라면 새로 생성 (이때는 문서 ID를 uid로 고정)
+                    await db.collection("rankings").doc(currentUser.uid).set({
+                        uid: currentUser.uid,
+                        name: currentUserNickname,
+                        time: recordedFinalTime,
+                        date: new Date().toLocaleDateString(),
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    saveMsg.innerText = "기록이 랭킹에 처음 등록되었습니다!";
+                }
+            } catch (error) {
+                saveMsg.innerText = "저장 실패: 서버 연결을 확인하세요.";
+                saveMsg.style.color = "#ffaaaa";
+                console.error(error);
+            }
+        }
+
+        /* =========================================
+        RANKING DATA LOADING (TOP 3 & FULL)
+        ========================================= */
+        rankingBtn.addEventListener("click", () => {
+            document.getElementById("top3Screen").style.display = "flex";
+            loadTop3();
+        });
+
+        // 뒤로 가기 버튼 (메인 메뉴로)
+        document.getElementById("top3BackBtn").addEventListener("click", () => {
+            document.getElementById("top3Screen").style.display = "none";
+        });
+
+        // 전체 랭킹 보기 버튼
+        document.getElementById("showFullRankingBtn").addEventListener("click", () => {
+            rankingScreen.style.display = "flex";
+            renderRanking();
+        });
+
+        // 기존 전체 랭킹 닫기 버튼 로직 유지
+        document.getElementById("rankingCloseBtn").addEventListener("click", () => {
+            rankingScreen.style.display = "none";
+        });
+
+        // 파이어베이스에서 Top 3만 가져와 단상에 세팅하는 함수
+        async function loadTop3() {
+            // 로딩 중 초기화
+            ["1", "2", "3"].forEach(rank => {
+                document.getElementById(`top${rank}Name`).innerText = "로딩 중...";
+                document.getElementById(`top${rank}Time`).innerText = "-";
+            });
+
+            try {
+                const snapshot = await db.collection("rankings").orderBy("time", "asc").limit(3).get();
+                const docs = snapshot.docs;
+
+                // 1위 데이터 세팅
+                if (docs[0]) {
+                    document.getElementById("top1Name").innerText = docs[0].data().name;
+                    document.getElementById("top1Time").innerText = docs[0].data().time.toFixed(2) + "초";
+                } else {document.getElementById("top1Name").innerText = "기록 없음";}
+
+                // 2위 데이터 세팅
+                if (docs[1]) {
+                    document.getElementById("top2Name").innerText = docs[1].data().name;
+                    document.getElementById("top2Time").innerText = docs[1].data().time.toFixed(2) + "초";
+                } else {document.getElementById("top2Name").innerText = "기록 없음";}
+
+                // 3위 데이터 세팅
+                if (docs[2]) {
+                    document.getElementById("top3Name").innerText = docs[2].data().name;
+                    document.getElementById("top3Time").innerText = docs[2].data().time.toFixed(2) + "초";
+                } else {document.getElementById("top3Name").innerText = "기록 없음";}
+
+            } catch (error) {
+                console.error("Top 3 랭킹 로딩 실패:", error);
+            }
+        }
+
+        async function renderRanking() {
+            rankingList.innerHTML = '<div class="rankItem" style="text-align:center;">서버에서 랭킹을 불러오는 중...</div>';
+            try {
+                const snapshot = await db.collection("rankings").orderBy("time", "asc").limit(500).get();
+                rankingList.innerHTML = "";
+
+                if (snapshot.empty) {
+                    rankingList.innerHTML = `<div class="rankItem">기록 없음</div>`;
+                    return;
+                }
+
+                let i = 0;
+                snapshot.docs.forEach(doc => {
+                    const r = doc.data();
+                    const div = document.createElement("div");
+                    div.className = "rankItem";
+                    if (i === 0) div.classList.add("gold");
+                    else if (i === 1) div.classList.add("silver");
+                    else if (i === 2) div.classList.add("bronze");
+                    div.innerHTML = `${i + 1}등 - ${r.name} - ${r.time.toFixed(2)}초`;
+                    rankingList.appendChild(div);
+                    i++;
+                });
+            } catch (error) {
+                rankingList.innerHTML = `<div class="rankItem" style="color:#ffaaaa;">랭킹을 불러오지 못했습니다.</div>`;
+            }
+        }
+
+        /* =========================================
+        🌟 게임 방법 (GUIDE MODAL) JAVASCRIPT LOGIC
+        ========================================= */
+        const guideModal = document.getElementById("guideModal");
+        const guideBtn = document.getElementById("guideBtn");
+        const guideCloseBtn = document.getElementById("guideCloseBtn");
+        const guidePrevBtn = document.getElementById("guidePrevBtn");
+        const guideNextBtn = document.getElementById("guideNextBtn");
+        const guideImg = document.getElementById("guideImg");
+        const guideVideo = document.getElementById("guideVideo");
+        const guideIframe = document.getElementById("guideIframe");
+        const guideText = document.getElementById("guideText");
+        const guidePageNum = document.getElementById("guidePageNum");
+        const videoErrorMsg = document.getElementById("videoErrorMsg");
+        const videoErrorFileName = document.getElementById("videoErrorFileName");
+
+        let currentGuidePage = 1;
+        const totalGuidePages = 4;
+
+        // 외부 동영상 및 로컬 동영상 URL 설정 (30MB 용량 제한 우회용)
+        // 직접 올리기 힘든 동영상은 유튜브(YouTube), 구글 드라이브(공유), Dropbox 등에 업로드한 뒤 해당 주소를 여기에 넣어주시면 자동 연동되어 재생됩니다!
+        // 유튜브 일반 링크(https://www.youtube.com/watch?v=...), 단축 링크(https://youtu.be/...), 쇼츠 링크, 임베드 링크 모두 지원합니다.
+        const guideVideoUrls = {
+            2: "https://youtu.be/JhcibRRbALk", // 2페이지 가이드 영상
+            3: "https://youtu.be/qX3RFcloghc", // 3페이지 가이드 영상
+            4: "https://youtu.be/PBTUY-J_A8M"  // 4페이지 가이드 영상
+        };
+
+        // 유튜브나 구글 드라이브 등의 링크를 자동 임베드(embed) 형태로 정규화해주는 함수
+        function getEmbedUrl(url) {
+            if (!url) return "";
+            
+            // 이미 embed 형식인 경우 그대로 사용
+            if (url.includes("/embed/")) {
+                return url;
+            }
+            
+            // 유튜브 일반 주소 또는 공유 단축 주소 파싱
+            let videoId = "";
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            
+            if (match && match[2].length === 11) {
+                videoId = match[2];
+            } else if (url.includes("youtube.com/shorts/")) {
+                const parts = url.split("youtube.com/shorts/");
+                if (parts.length > 1) {
+                    videoId = parts[1].split(/[?#]/)[0];
+                }
+            }
+            
+            if (videoId) {
+                // 자동 재생(autoplay), 반복 재생(loop), 무음(mute) 및 모바일 인라인 재생 최적화 파라미터 적용
+                return `https://www.youtube.com/embed/${videoId}?autoplay=1&loop=1&playlist=${videoId}&mute=1&playsinline=1`;
+            }
+            
+            return url;
+        }
+
+        // 주어진 링크가 iframe(유튜브, 구글 드라이브 등)으로 렌더링해야 하는 링크인지 구분하는 함수
+        function isIframeLink(url) {
+            if (!url) return false;
+            const lower = url.toLowerCase();
+            if (lower.includes("youtube.com") || lower.includes("youtu.be") || lower.includes("drive.google.com") || lower.includes("vimeo.com") || lower.includes("/embed")) {
+                return true;
+            }
+            // 확장자가 mp4, webm, ogg 이면 직접 비디오 재생
+            if (lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".ogg")) {
+                return false;
+            }
+            // 로컬 파일명 포맷(3p.mp4 등)이 아닌 일반 웹 URL 주소인 경우 iframe 재생 유연성 제공
+            if (lower.startsWith("http://") || lower.startsWith("https://")) {
+                return true;
+            }
+            return false;
+        }
+
+        // 에러 이벤트 핸들러 (외부 임베드 재생으로 불필요한 로컬 에러 무시)
+        if (guideVideo) {
+            guideVideo.addEventListener("error", (e) => {
+                console.log("Guide video load/play failed (Expected if using external URL):", e);
+                guideVideo.style.display = "none";
+            });
+        }
+
+        guideBtn.addEventListener("click", () => {
+            currentGuidePage = 1;
+            updateGuidePage();
+            guideModal.style.display = "flex";
+        });
+
+        function stopGuideVideo() {
+            if (guideVideo) {
+                guideVideo.pause();
+                guideVideo.src = "";
+            }
+            if (guideIframe) {
+                guideIframe.src = "";
+                guideIframe.style.display = "none";
+            }
+            if (videoErrorMsg) {
+                videoErrorMsg.style.display = "none";
+            }
+        }
+
+        guideCloseBtn.addEventListener("click", () => {
+            stopGuideVideo();
+            guideModal.style.display = "none";
+        });
+
+        guidePrevBtn.addEventListener("click", () => {
+            if (currentGuidePage > 1) {
+                currentGuidePage--;
+                updateGuidePage();
+            }
+        });
+
+        guideNextBtn.addEventListener("click", () => {
+            if (currentGuidePage < totalGuidePages) {
+                currentGuidePage++;
+                updateGuidePage();
+            } else {
+                stopGuideVideo();
+                guideModal.style.display = "none";
+            }
+        });
+
+        function updateGuidePage() {
+            stopGuideVideo();
+
+            if (currentGuidePage === 1) {
+                guideImg.src = "1p.png";
+                guideImg.style.display = "block";
+                guideVideo.style.display = "none";
+                if (guideIframe) guideIframe.style.display = "none";
+            } else {
+                guideImg.style.display = "none";
+                const originalUrl = guideVideoUrls[currentGuidePage] || `${currentGuidePage}p.mp4`;
+                const isIframe = isIframeLink(originalUrl);
+
+                if (videoErrorFileName) {
+                    videoErrorFileName.innerText = `${currentGuidePage}p.mp4 (실제 경로: ${originalUrl})`;
+                }
+
+                if (isIframe) {
+                    // 외부 임베드 재생 (유튜브 등)
+                    guideVideo.style.display = "none";
+                    if (guideIframe) {
+                        guideIframe.src = getEmbedUrl(originalUrl);
+                        guideIframe.style.display = "block";
+                    }
+                } else {
+                    // 로컬 혹은 직접 동영상 재생 (.mp4)
+                    if (guideIframe) guideIframe.style.display = "none";
+                    guideVideo.src = originalUrl;
+                    guideVideo.style.display = "block";
+                    guideVideo.play().catch(e => {
+                        console.log("Guide video play blocked or failed:", e);
+                    });
+                }
+            }
+
+            guideText.innerText = "";
+            guidePageNum.innerText = `${currentGuidePage} / ${totalGuidePages}`;
+
+            // 첫 페이지 예외처리
+            if (currentGuidePage === 1) {
+                guidePrevBtn.style.opacity = "0.3";
+                guidePrevBtn.style.pointerEvents = "none";
+            } else {
+                guidePrevBtn.style.opacity = "1";
+                guidePrevBtn.style.pointerEvents = "auto";
+            }
+
+            // 마지막 페이지 텍스트 전환
+            if (currentGuidePage === totalGuidePages) {
+                guideNextBtn.innerText = "완료";
+            } else {
+                guideNextBtn.innerText = "다음";
+            }
+        }
+
+        /* =========================================
+        BACK & UTIL SYSTEM
+        ========================================= */
+
+        document.getElementById("backBtn").addEventListener("click", () => {location.reload();});
+
+        function sleep(ms) {return new Promise(resolve => {setTimeout(resolve, ms);});}
+
+        window.addEventListener("resize", () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+        let introFinished = false;
+        let hasClickedBody = false;
+
+        // 인트로 시퀀스 처리
+        window.addEventListener("DOMContentLoaded", () => {
+            const introScreen = document.getElementById("introScreen");
+            const introImg = document.getElementById("introImg");
+            
+            if (sessionStorage.getItem("introShown") === "true") {
+                if (introScreen) {
+                    introScreen.style.display = "none";
+                    introScreen.style.opacity = "0";
+                }
+                introFinished = true;
+                if (hasClickedBody) {
+                    startMenuBgm();
+                }
+                return;
+            }
+
+            // 1. 잠시 후 이미지 페이드 인
+            setTimeout(() => {
+                if (introImg) introImg.style.opacity = "1";
+            }, 300);
+
+            // 2. 2.5초 후에 이미지 페이드 아웃
+            setTimeout(() => {
+                if (introImg) introImg.style.opacity = "0";
+            }, 2500);
+
+            // 3. 3.8초 후에 인트로 전체 화면 페이드 아웃
+            setTimeout(() => {
+                if (introScreen) {
+                    introScreen.style.opacity = "0";
+                }
+            }, 3800);
+
+            // 4. 5초 후에 인트로 화면 완전히 제거(display none) 및 메뉴 BGM 시작 허용
+            setTimeout(() => {
+                if (introScreen) {
+                    introScreen.style.display = "none";
+                }
+                introFinished = true;
+                sessionStorage.setItem("introShown", "true");
+                if (hasClickedBody) {
+                    startMenuBgm();
+                }
+            }, 5000);
+        });
+
+        document.body.addEventListener("click", () => {
+            hasClickedBody = true;
+            if (introFinished) {
+                startMenuBgm();
+            }
+        }, {once: true});
+
+        (async () => {
+            const success = await initWebcam();
+            if (success) {
+                await startTracking();
+                overlay.style.display = "none";
+            }
+        })();
+
+        /* =========================================
+        SETTINGS CONTROLS
+        ========================================= */
+
+        const settingsBtn = document.getElementById("settingsBtn");
+        const settingsModal = document.getElementById("settingsModal");
+        const closeSettingsBtn = document.getElementById("closeSettingsBtn");
+        const bgmSlider = document.getElementById("bgmSlider");
+        const sfxSlider = document.getElementById("sfxSlider");
+
+        settingsBtn.addEventListener("click", () => {settingsModal.style.display = "flex";});
+        closeSettingsBtn.addEventListener("click", () => {settingsModal.style.display = "none";});
+
+        bgmSlider.addEventListener("input", (e) => {
+            masterBgmVolume = parseFloat(e.target.value);
+            if (menuBgmAudio) {
+                menuBgmAudio.volume = masterBgmVolume;
+            }
+            if (inGameBgmAudio) {
+                inGameBgmAudio.volume = masterBgmVolume;
+            }
+        });
+        sfxSlider.addEventListener("input", (e) => {masterSfxVolume = parseFloat(e.target.value);});
+
+    </script>
+</body>
+
+</html>
