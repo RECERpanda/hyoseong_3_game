@@ -713,6 +713,93 @@ TOGGLE SWITCH
             font-size: 18px;
             color: #ccc;
         }
+
+        /* 노트북 이나 작은 화면 비율을 위한 미디어 쿼리 */
+        @media (max-height: 900px) {
+            .podium-container {
+                margin-top: 100px;
+                gap: 20px;
+                height: 65%;
+            }
+            .podium-wrapper img[src$="1위.png"] {
+                width: 200px !important;
+                height: 266px !important;
+            }
+            .podium-wrapper img[src$="2위.png"] {
+                width: 160px !important;
+                height: 213px !important;
+            }
+            .podium-wrapper img[src$="3위.png"] {
+                width: 133px !important;
+                height: 177px !important;
+            }
+            .rank-1 {
+                height: 240px !important;
+            }
+            .rank-2 {
+                height: 180px !important;
+            }
+            .rank-3 {
+                height: 135px !important;
+            }
+            .info-box {
+                padding: 10px 5px !important;
+                width: 130px !important;
+            }
+            .info-rank {
+                font-size: 20px !important;
+                margin-bottom: 4px !important;
+            }
+            .gold-box .info-rank {
+                font-size: 22px !important;
+            }
+            .info-name, .info-time {
+                font-size: 14px !important;
+            }
+        }
+
+        @media (max-height: 700px) {
+            .podium-container {
+                margin-top: 70px;
+                gap: 15px;
+                height: 70%;
+            }
+            .podium-wrapper img[src$="1위.png"] {
+                width: 150px !important;
+                height: 200px !important;
+            }
+            .podium-wrapper img[src$="2위.png"] {
+                width: 120px !important;
+                height: 160px !important;
+            }
+            .podium-wrapper img[src$="3위.png"] {
+                width: 100px !important;
+                height: 133px !important;
+            }
+            .rank-1 {
+                height: 180px !important;
+            }
+            .rank-2 {
+                height: 135px !important;
+            }
+            .rank-3 {
+                height: 100px !important;
+            }
+            .info-box {
+                padding: 8px 4px !important;
+                width: 100px !important;
+            }
+            .info-rank {
+                font-size: 16px !important;
+                margin-bottom: 2px !important;
+            }
+            .gold-box .info-rank {
+                font-size: 18px !important;
+            }
+            .info-name, .info-time {
+                font-size: 11px !important;
+            }
+        }
     </style>
 </head>
 
@@ -1450,18 +1537,24 @@ TOGGLE SWITCH
                 lastMove = currentMove;
             }
 
+            // Determine active speed factor (0.5x when memorySequenceLength is 8, 6, or 4)
+            let currentSpeedFactor = memorySpeedFactor;
+            if (memorySequenceLength === 8 || memorySequenceLength === 6 || memorySequenceLength === 4) {
+                currentSpeedFactor = 0.5;
+            }
+
             // Play 준비.mp3 at dynamic speed
             const prepSound = new Audio("준비.mp3");
             prepSound.volume = masterSfxVolume;
-            prepSound.playbackRate = memorySpeedFactor;
+            prepSound.playbackRate = currentSpeedFactor;
             prepSound.play().catch(() => {});
 
             const imgEl = document.getElementById("stage1Img");
             const seqTextEl = document.getElementById("stage1SeqText");
             seqTextEl.style.display = "block";
 
-            // Show sequence (dynamic speed based on memorySpeedFactor)
-            const sleepDuration = Math.round(350 / memorySpeedFactor);
+            // Show sequence (dynamic speed based on currentSpeedFactor)
+            const sleepDuration = Math.round(350 / currentSpeedFactor);
             for (let i = 0; i < memorySequenceLength; i++) {
                 if (currentStage !== 1) {
                     prepSound.pause();
